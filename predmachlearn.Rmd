@@ -1,0 +1,111 @@
+Practical Machine Learning Course Project
+========================================================
+
+### INTRODUCTION
+
+The goal of this project is to predict the manner in which people did the exercise. This is the "classe" variable in the training set.
+
+
+### EXPLORE AND PREPROCESS THE TRAINING DATASET
+The training data for this project are available here:
+
+https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv
+
+The test data are available here:
+
+https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv
+
+After download the data set to local dir, using read.csv() to load data.
+
+```{r}
+setwd("D:\\code\\predmachlearn")
+library(caret)
+set.seed(107)
+training <- read.csv( "data\\pml-training.csv", na.strings = c("NA", "") )
+testing <- read.csv( "data\\pml-testing.csv", na.strings = c("NA", "") )
+ncol(training)
+nrow(training)
+```
+The training data set is quite large. It contains 19622 samples with 160 features. Exclude the "classe" variable, there are 159 variables would be used as predictor.
+
+The "classe" is the outcome variable with five levels.
+There are sitting-down, standing-up, standing, walking, and sitting.
+
+```{r}
+table(training$classe)
+```
+Then, remove some metadata to record, such as X (row number), user_name and cvtd_timestamp.
+
+```{r}
+mindex <- grep("X|user_name|cvtd_timestamp", names(training))
+training <- training[, -mindex]
+testing <- testing[, -mindex]
+```
+
+Explore the data, it is easy to find that there are a lot of values NA or useless or empty. Remove these variables will increase training speed.
+
+```{r}
+NASum <- apply( training, 2, function(x) { sum(is.na(x)) } )
+training <- training[, which(NASum == 0)]
+testing <- testing[, which(NASum == 0)]
+ncol(training)
+```
+
+### BUILD MODEL
+Divide the data into 2 sets, one for training, the other for validate.
+
+```{r}
+trainingIndex  <- createDataPartition(training$classe, p=.5, list=FALSE)
+training.train <- training[ trainingIndex,]
+training.test  <- training[-trainingIndex,]
+rm(training)
+```
+
+There are five groups to identify. Tree-based methods and LDA are adopted to analysis this data set.
+
+```{r}
+# CART
+system.time( modRPart <- train(classe ~ ., data=training.train, method="rpart") )
+# Random Forest
+trControl <- trainControl(method = "cv", number = 4)
+system.time( modRF <- train(training.train$classe ~ ., method = "rf",
+    trControl = trControl, training.train) )
+# Boosting tree
+#system.time(modGBM <- train(classe ~ ., data=training.train, method="gbm"))
+# LDA
+system.time(modLDA <- train(classe ~ ., data=training.train, method="lda"))
+```
+
+According to system.time method, boosting tree took a long time to train the model (Removed when prepared this report). 
+
+```{r}
+predRPart <- predict(modRPart, training.test)  
+predRF <- predict(modRF, training.test)  
+#Removed when prepared this report predGBM <- predict(modGBM, training.test)
+predLDA <- predict(modLDA, training.test)
+confusionMatrix(predRPart, training.test$classe)
+confusionMatrix(predRF, training.test$classe)
+#Removed when prepared this report confusionMatrix(predGBM, training.test$classe)
+confusionMatrix(predLDA, training.test$classe)
+
+```
+Using training.test to test result, obviously, Boosting tree and random forest are the best, their accuracies are great than 99%.
+
+### CONCLUSION
+Random Forest is a good method for this dataset for it's accuracy and training time cost.
+
+### 20 TEST CASES
+Now use the modRF to predict the second part of the assignment.
+```{r}
+pml_write_files = function(x){
+  n = length(x)
+  for(i in 1:n){
+    filename = paste0("problem_id_",i,".txt")
+    write.table(x[i],file=filename,quote=FALSE,row.names=FALSE,col.names=FALSE)
+  }
+}
+predTestRPart <- predict(modRF, testing) 
+pml_write_files(predTestRPart)
+
+```
+
